@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadora de Custo de Token de IA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gpt-tokenizer@1.3.2/browser.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* bg-slate-50 */
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        /* Estilização customizada para o slider */
+        input[type=range] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 8px;
+            background: #e5e7eb; /* bg-gray-200 */
+            border-radius: 9999px;
+            outline: none;
+            opacity: 0.7;
+            transition: opacity .2s;
+        }
+        input[type=range]:hover {
+            opacity: 1;
+        }
+        input[type=range]:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #4f46e5; /* bg-indigo-600 */
+            cursor: pointer;
+            border-radius: 50%;
+            border: 2px solid white;
+        }
+        input[type=range]:disabled::-webkit-slider-thumb {
+             background: #9ca3af;
+        }
+        input[type=range]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #4f46e5; /* bg-indigo-600 */
+            cursor: pointer;
+            border-radius: 50%;
+            border: 2px solid white;
+        }
+        input[type=range]:disabled::-moz-range-thumb {
+             background: #9ca3af;
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <div class="container mx-auto p-4 sm:p-6 lg:p-8 max-w-3xl">
+        
+        <header class="text-center mb-10">
+            <h1 class="text-3xl sm:text-4xl font-bold text-gray-900">Estimador de Custo de IA</h1>
+            <p class="mt-2 text-md text-gray-600">Calcule os custos de tokens para os principais modelos de LLM.</p>
+        </header>
+
+        <main class="space-y-8">
+            
+            <!-- Card de Configuração e Entrada -->
+            <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200 fade-in">
+                <div class="mb-6">
+                    <label for="model-select" class="block text-sm font-medium text-gray-700 mb-2">1. Selecione o Modelo</label>
+                    <select id="model-select" class="w-full p-3 border border-gray-300 rounded-lg bg-gray-50 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                        <!-- Opções preenchidas por JS -->
+                    </select>
+                </div>
+                <div>
+                    <label for="text-input" class="block text-sm font-medium text-gray-700 mb-2">2. Insira o Texto Base da Interação</label>
+                    <textarea id="text-input" rows="10" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow" placeholder="Cole aqui um exemplo de texto de entrada (prompt)..."></textarea>
+                    <div class="text-right mt-2">
+                         <button id="clear-button" class="text-sm font-medium text-indigo-600 hover:text-indigo-800 transition-colors">Limpar</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card de Estatísticas e Custos -->
+            <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200 fade-in">
+                <h2 class="text-xl font-semibold text-gray-800 mb-6">3. Análise de Custo por Interação</h2>
+                
+                <!-- Estatísticas do Texto -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center mb-8">
+                    <div>
+                        <div class="text-sm text-gray-500">Caracteres</div>
+                        <div id="char-count" class="text-2xl font-bold text-indigo-600">0</div>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-500">Palavras</div>
+                        <div id="word-count" class="text-2xl font-bold text-indigo-600">0</div>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-500">Sentenças</div>
+                        <div id="sentence-count" class="text-2xl font-bold text-indigo-600">0</div>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-500">Tokens</div>
+                        <div id="token-count" class="text-2xl font-bold text-indigo-600">0</div>
+                        <!-- NOTA SOBRE A PRECISÃO DA CONTAGEM -->
+                        <div id="tokenizer-note" class="text-xs text-gray-400 mt-1" style="min-height: 1rem;"></div>
+                    </div>
+                </div>
+
+                <!-- Estimativa de Saída -->
+                <div id="output-container" class="mb-8">
+                    <div class="flex justify-between items-center mb-2">
+                        <label for="output-slider" class="block text-sm font-medium text-gray-700">Tokens de Saída (Resposta)</label>
+                        <span id="output-slider-value" class="font-semibold text-indigo-600 bg-indigo-100 px-2 py-1 rounded-md">512</span>
+                    </div>
+                    <input id="output-slider" type="range" min="0" max="8192" step="64" value="512">
+                </div>
+                
+                <!-- Detalhamento de Custo -->
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center p-3 bg-slate-100 rounded-lg">
+                        <span class="font-medium text-gray-700">Custo de Entrada (Prompt)</span>
+                        <span id="input-cost" class="font-semibold text-gray-900">$0.00000</span>
+                    </div>
+                    <div id="output-cost-container" class="flex justify-between items-center p-3 bg-slate-100 rounded-lg">
+                        <span class="font-medium text-gray-700">Custo de Saída (Resposta)</span>
+                        <span id="output-cost" class="font-semibold text-gray-900">$0.00000</span>
+                    </div>
+                    <div class="flex justify-between items-center p-4 mt-2 border-t-2 border-dashed border-gray-200">
+                        <span class="font-bold text-lg text-gray-800">Custo Total por Interação</span>
+                        <span id="total-cost" class="font-bold text-xl text-indigo-600">$0.00000</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card de Projeção de Custo -->
+            <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200 fade-in">
+                <h2 class="text-xl font-semibold text-gray-800 mb-6">4. Projeção de Custo em Escala</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                    <div>
+                        <label for="conversations-day" class="block text-sm font-medium text-gray-700 mb-2">Conversas por Dia</label>
+                        <input type="number" id="conversations-day" value="10" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label for="interactions-conversation" class="block text-sm font-medium text-gray-700 mb-2">Média de Interações / Conversa</label>
+                        <input type="number" id="interactions-conversation" value="4" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                </div>
+
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center p-3 bg-slate-100 rounded-lg">
+                        <span class="font-medium text-gray-700">Custo Diário Estimado</span>
+                        <span id="daily-cost" class="font-semibold text-gray-900">$0.00000</span>
+                    </div>
+                    <div class="flex justify-between items-center p-3 bg-slate-100 rounded-lg">
+                        <span class="font-medium text-gray-700">Custo Mensal Estimado</span>
+                        <span id="monthly-cost" class="font-semibold text-gray-900">$0.00000</span>
+                    </div>
+                    <div class="flex justify-between items-center p-4 mt-2 border-t-2 border-dashed border-gray-200">
+                        <span class="font-bold text-lg text-gray-800">Custo Anual Estimado</span>
+                        <span id="yearly-cost" class="font-bold text-xl text-indigo-600">$0.00000</span>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500 mt-4">Projeções baseadas no "Custo Total por Interação" multiplicado pelos valores de escala acima.</p>
+            </div>
+            
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- ELEMENTOS DO DOM ---
+            const textInput = document.getElementById('text-input');
+            const modelSelect = document.getElementById('model-select');
+            const clearButton = document.getElementById('clear-button');
+            const outputSlider = document.getElementById('output-slider');
+            const outputSliderValue = document.getElementById('output-slider-value');
+            const outputContainer = document.getElementById('output-container');
+            
+            const charCountEl = document.getElementById('char-count');
+            const wordCountEl = document.getElementById('word-count');
+            const sentenceCountEl = document.getElementById('sentence-count');
+            const tokenCountEl = document.getElementById('token-count');
+            const tokenizerNoteEl = document.getElementById('tokenizer-note');
+            
+            const inputCostEl = document.getElementById('input-cost');
+            const outputCostEl = document.getElementById('output-cost');
+            const outputCostContainer = document.getElementById('output-cost-container');
+            const totalCostEl = document.getElementById('total-cost');
+            
+            const conversationsDayInput = document.getElementById('conversations-day');
+            const interactionsConversationInput = document.getElementById('interactions-conversation');
+            const dailyCostEl = document.getElementById('daily-cost');
+            const monthlyCostEl = document.getElementById('monthly-cost');
+            const yearlyCostEl = document.getElementById('yearly-cost');
+
+            // --- DADOS DE PREÇOS (por 1 milhão de tokens) ---
+            const modelPricing = {
+                // OpenAI New Models
+                'openai-o3': { name: 'OpenAI: o3', input: 2.00, output: 8.00, family: 'openai' },
+                'openai-o4-mini': { name: 'OpenAI: o4 mini', input: 1.100, output: 4.400, family: 'openai' },
+                'openai-gpt4.1': { name: 'OpenAI: GPT-4.1', input: 2.00, output: 8.00, family: 'openai' },
+                'openai-gpt4.1-mini': { name: 'OpenAI: GPT-4.1 mini', input: 0.40, output: 1.60, family: 'openai' },
+                'openai-gpt4.1-nano': { name: 'OpenAI: GPT-4.1 nano', input: 0.100, output: 0.400, family: 'openai' },
+                // OpenAI Chat
+                'openai-gpt4o': { name: 'OpenAI: GPT-4o', input: 5.00, output: 15.00, family: 'openai' },
+                'openai-gpt4o-mini': { name: 'OpenAI: GPT-4o mini', input: 0.15, output: 0.60, family: 'openai' },
+                'openai-gpt4-turbo': { name: 'OpenAI: GPT-4 Turbo', input: 10.00, output: 30.00, family: 'openai' },
+                'openai-gpt4-32k': { name: 'OpenAI: GPT-4 (32k)', input: 60.00, output: 120.00, family: 'openai' },
+                'openai-gpt4': { name: 'OpenAI: GPT-4 (8k)', input: 30.00, output: 60.00, family: 'openai' },
+                'openai-gpt3.5-turbo': { name: 'OpenAI: GPT-3.5 Turbo', input: 0.50, output: 1.50, family: 'openai' },
+                // Anthropic Chat - Gen 4
+                'anthropic-claude4-opus': { name: 'Anthropic: Claude 4 Opus', input: 15.00, output: 75.00, family: 'anthropic' },
+                'anthropic-claude4-sonnet': { name: 'Anthropic: Claude 4 Sonnet', input: 3.00, output: 15.00, family: 'anthropic' },
+                // Anthropic Chat - Gen 3.5
+                'anthropic-claude3.5-sonnet': { name: 'Anthropic: Claude 3.5 Sonnet', input: 3.00, output: 15.00, family: 'anthropic' },
+                // Anthropic Chat - Gen 3
+                'anthropic-claude3-opus': { name: 'Anthropic: Claude 3 Opus', input: 15.00, output: 75.00, family: 'anthropic' },
+                'anthropic-claude3-sonnet': { name: 'Anthropic: Claude 3 Sonnet', input: 3.00, output: 15.00, family: 'anthropic' },
+                'anthropic-claude3-haiku': { name: 'Anthropic: Claude 3 Haiku', input: 0.25, output: 1.25, family: 'anthropic' },
+                // Anthropic Chat - Legacy
+                'anthropic-claude2.1': { name: 'Anthropic: Claude 2.1', input: 8.00, output: 24.00, family: 'anthropic' },
+                'anthropic-claude2.0': { name: 'Anthropic: Claude 2.0', input: 8.00, output: 24.00, family: 'anthropic' },
+                'anthropic-claude-instant-1.2': { name: 'Anthropic: Claude Instant 1.2', input: 0.80, output: 2.40, family: 'anthropic' },
+                // Google Chat - Tier 1 Pricing from ai.google.dev
+                'google-gemini-1.5-pro': { name: 'Google: Gemini 1.5 Pro', input: 3.50, output: 7.00, family: 'google' },
+                'google-gemini-1.5-flash': { name: 'Google: Gemini 1.5 Flash', input: 0.35, output: 0.70, family: 'google' },
+                'google-gemini-1.0-pro': { name: 'Google: Gemini 1.0 Pro', input: 0.50, output: 1.50, family: 'google' },
+                // Google Chat (Vertex AI Pricing - Kept for reference)
+                'google-gemini-1.0-pro-vision-vertex': { name: 'Google: Gemini 1.0 Pro Vision (Vertex)', input: 0.25, output: 0.75, family: 'google' },
+                // Google Chat (Preview)
+                'google-gemini-2.5-pro-preview': { name: 'Google: Gemini 2.5 Pro (Preview)', input: 0.00, output: 0.00, family: 'google' },
+                'google-gemini-2.5-flash-preview': { name: 'Google: Gemini 2.5 Flash (Preview)', input: 0.00, output: 0.00, family: 'google' },
+                // Embedding Models
+                'openai-embedding-3-large': { name: 'Embedding: OpenAI 3 Large', input: 0.13, output: 0, family: 'embedding' },
+                'openai-embedding-3-small': { name: 'Embedding: OpenAI 3 Small', input: 0.02, output: 0, family: 'embedding' },
+                'openai-embedding-ada-002': { name: 'Embedding: OpenAI Ada v2', input: 0.10, output: 0, family: 'embedding' },
+                'google-embedding-004': { name: 'Embedding: Google 004', input: 0.20, output: 0, family: 'embedding' },
+                'google-multilingual-embedding-002': { name: 'Embedding: Google Multilingual 002', input: 0.20, output: 0, family: 'embedding' }
+            };
+
+            // --- FUNÇÕES ---
+
+            function formatCurrency(amount) {
+                return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 5, maximumFractionDigits: 5 })}`;
+            }
+
+            function countTokens(text, modelFamily) {
+                if (!text) return 0;
+
+                if ((modelFamily === 'openai' || modelFamily === 'embedding') && window.gptTokenizer) {
+                    return window.gptTokenizer.encode(text).length;
+                }
+                
+                switch (modelFamily) {
+                    case 'anthropic':
+                        return Math.ceil(text.length / 3.5);
+                    case 'google':
+                    case 'openai': 
+                    default:
+                        return Math.ceil(text.length / 4);
+                }
+            }
+
+            function runCalculations() {
+                const text = textInput.value;
+                const selectedModelKey = modelSelect.value;
+                const model = modelPricing[selectedModelKey];
+                
+                const isEmbeddingModel = model.family === 'embedding';
+                outputContainer.style.display = isEmbeddingModel ? 'none' : 'block';
+                outputCostContainer.style.display = isEmbeddingModel ? 'none' : 'block';
+
+                const outputTokens = isEmbeddingModel ? 0 : parseInt(outputSlider.value, 10);
+                
+                const charCount = text.length;
+                const wordCount = text ? text.trim().split(/\s+/).filter(Boolean).length : 0;
+                const sentenceCount = text ? (text.match(/[^\.!\?]+[\.!\?]+/g) || []).length : 0;
+                const inputTokens = countTokens(text, model.family);
+
+                charCountEl.textContent = charCount.toLocaleString('pt-BR');
+                wordCountEl.textContent = wordCount.toLocaleString('pt-BR');
+                sentenceCountEl.textContent = sentenceCount.toLocaleString('pt-BR');
+                tokenCountEl.textContent = inputTokens.toLocaleString('pt-BR');
+
+                if (model.family === 'openai' && window.gptTokenizer) {
+                    tokenizerNoteEl.textContent = 'Contagem precisa';
+                    tokenizerNoteEl.style.color = '#16a34a'; // green-600
+                } else {
+                    tokenizerNoteEl.textContent = 'Contagem estimada';
+                    tokenizerNoteEl.style.color = '#ca8a04'; // yellow-600
+                }
+
+                const inputCost = (inputTokens / 1000000) * model.input;
+                const outputCost = (outputTokens / 1000000) * model.output;
+                const totalInteractionCost = inputCost + outputCost;
+
+                inputCostEl.textContent = formatCurrency(inputCost);
+                outputCostEl.textContent = formatCurrency(outputCost);
+                totalCostEl.textContent = formatCurrency(totalInteractionCost);
+                
+                const conversationsPerDay = parseInt(conversationsDayInput.value, 10) || 0;
+                const interactionsPerConversation = parseInt(interactionsConversationInput.value, 10) || 0;
+
+                const dailyCost = totalInteractionCost * interactionsPerConversation * conversationsPerDay;
+                const monthlyCost = dailyCost * 30;
+                const yearlyCost = dailyCost * 365;
+
+                dailyCostEl.textContent = formatCurrency(dailyCost);
+                monthlyCostEl.textContent = formatCurrency(monthlyCost);
+                yearlyCostEl.textContent = formatCurrency(yearlyCost);
+            }
+
+            function clearInput() {
+                textInput.value = '';
+                runCalculations();
+            }
+
+            // --- INICIALIZAÇÃO DA UI ---
+            const categories = {
+                "Modelos de Chat (OpenAI - Novos)": ['openai-o3', 'openai-o4-mini', 'openai-gpt4.1', 'openai-gpt4.1-mini', 'openai-gpt4.1-nano'],
+                "Modelos de Chat (OpenAI)": ['openai-gpt4o', 'openai-gpt4o-mini', 'openai-gpt4-turbo', 'openai-gpt4-32k', 'openai-gpt4', 'openai-gpt3.5-turbo'],
+                "Modelos de Chat (Anthropic - Geração 4)": ['anthropic-claude4-opus', 'anthropic-claude4-sonnet'],
+                "Modelos de Chat (Anthropic - Geração 3.5)": ['anthropic-claude3.5-sonnet'],
+                "Modelos de Chat (Anthropic - Geração 3)": ['anthropic-claude3-opus', 'anthropic-claude3-sonnet', 'anthropic-claude3-haiku'],
+                "Modelos de Chat (Anthropic - Legados)": ['anthropic-claude2.1', 'anthropic-claude2.0', 'anthropic-claude-instant-1.2'],
+                "Modelos de Chat (Google)": ['google-gemini-1.5-pro', 'google-gemini-1.5-flash', 'google-gemini-1.0-pro', 'google-gemini-1.0-pro-vision-vertex'],
+                "Modelos de Chat (Google - Preview)": ['google-gemini-2.5-pro-preview', 'google-gemini-2.5-flash-preview'],
+                "Modelos de Embedding": ['openai-embedding-3-large', 'openai-embedding-3-small', 'openai-embedding-ada-002', 'google-embedding-004', 'google-multilingual-embedding-002']
+            };
+
+            for (const category in categories) {
+                const optgroup = document.createElement('optgroup');
+                optgroup.label = category;
+                categories[category].forEach(key => {
+                    const option = document.createElement('option');
+                    option.value = key;
+                    option.textContent = modelPricing[key].name;
+                    optgroup.appendChild(option);
+                });
+                modelSelect.appendChild(optgroup);
+            }
+            modelSelect.value = 'openai-o3';
+
+            // --- OUVINTES DE EVENTOS ---
+            textInput.addEventListener('input', runCalculations);
+            modelSelect.addEventListener('change', runCalculations);
+            outputSlider.addEventListener('input', () => {
+                outputSliderValue.textContent = outputSlider.value;
+                runCalculations();
+            });
+            clearButton.addEventListener('click', clearInput);
+            conversationsDayInput.addEventListener('input', runCalculations);
+            interactionsConversationInput.addEventListener('input', runCalculations);
+
+            // --- CÁLCULO INICIAL ---
+            runCalculations();
+            setTimeout(runCalculations, 500);
+        });
+    </script>
+</body>
+</html>
