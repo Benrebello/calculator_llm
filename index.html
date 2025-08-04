@@ -62,6 +62,9 @@
         input[type=range]:disabled::-moz-range-thumb {
              background: #9ca3af;
         }
+        .hidden {
+            display: none;
+        }
     </style>
 </head>
 <body class="text-gray-800">
@@ -83,6 +86,15 @@
                         <!-- Opções preenchidas por JS -->
                     </select>
                 </div>
+
+                <!-- Seletor de Nível (Tier) - Visível apenas para modelos Google com tiers -->
+                <div id="tier-selection-container" class="mb-6 hidden">
+                    <label for="tier-select" class="block text-sm font-medium text-gray-700 mb-2">1.1 Selecione o Nível de Preço</label>
+                    <select id="tier-select" class="w-full p-3 border border-gray-300 rounded-lg bg-gray-50 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                        <!-- Níveis preenchidos por JS -->
+                    </select>
+                </div>
+
                 <div>
                     <label for="text-input" class="block text-sm font-medium text-gray-700 mb-2">2. Insira o Texto Base da Interação</label>
                     <textarea id="text-input" rows="10" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow" placeholder="Cole aqui um exemplo de texto de entrada (prompt)..."></textarea>
@@ -113,7 +125,6 @@
                     <div>
                         <div class="text-sm text-gray-500">Tokens</div>
                         <div id="token-count" class="text-2xl font-bold text-indigo-600">0</div>
-                        <!-- NOTA SOBRE A PRECISÃO DA CONTAGEM -->
                         <div id="tokenizer-note" class="text-xs text-gray-400 mt-1" style="min-height: 1rem;"></div>
                     </div>
                 </div>
@@ -177,13 +188,19 @@
             </div>
             
         </main>
+
+        <footer class="text-center py-8">
+            <p class="text-sm text-gray-500">Desenvolvido por Benjamin Rebello</p>
+        </footer>
     </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             // --- ELEMENTOS DO DOM ---
-            const textInput = document.getElementById('text-input');
             const modelSelect = document.getElementById('model-select');
+            const tierSelectionContainer = document.getElementById('tier-selection-container');
+            const tierSelect = document.getElementById('tier-select');
+            const textInput = document.getElementById('text-input');
             const clearButton = document.getElementById('clear-button');
             const outputSlider = document.getElementById('output-slider');
             const outputSliderValue = document.getElementById('output-slider-value');
@@ -206,49 +223,96 @@
             const monthlyCostEl = document.getElementById('monthly-cost');
             const yearlyCostEl = document.getElementById('yearly-cost');
 
-            // --- DADOS DE PREÇOS (por 1 milhão de tokens) ---
+            // --- DADOS DE PREÇOS (por 1 milhão de tokens em USD) ---
             const modelPricing = {
-                // OpenAI New Models
-                'openai-o3': { name: 'OpenAI: o3', input: 2.00, output: 8.00, family: 'openai' },
-                'openai-o4-mini': { name: 'OpenAI: o4 mini', input: 1.100, output: 4.400, family: 'openai' },
-                'openai-gpt4.1': { name: 'OpenAI: GPT-4.1', input: 2.00, output: 8.00, family: 'openai' },
-                'openai-gpt4.1-mini': { name: 'OpenAI: GPT-4.1 mini', input: 0.40, output: 1.60, family: 'openai' },
-                'openai-gpt4.1-nano': { name: 'OpenAI: GPT-4.1 nano', input: 0.100, output: 0.400, family: 'openai' },
-                // OpenAI Chat
+                // Google Gemini 2.5 Series
+                'google-gemini-2.5-pro': { 
+                    name: 'Google: Gemini 2.5 Pro', 
+                    family: 'google',
+                    tiers: {
+                        'free': { name: 'Nível Gratuito', input: 0.00, output: 0.00 },
+                        'low_context': { name: 'Pago (<= 200 mil tokens)', input: 1.25, output: 10.00 },
+                        'high_context': { name: 'Pago (> 200 mil tokens)', input: 2.50, output: 15.00 }
+                    }
+                },
+                'google-gemini-2.5-flash': { 
+                    name: 'Google: Gemini 2.5 Flash', 
+                    family: 'google_fixed',
+                    input: 0.30, 
+                    output: 2.50 
+                },
+                'google-gemini-2.5-flash-lite': { 
+                    name: 'Google: Gemini 2.5 Flash-Lite', 
+                    family: 'google_fixed',
+                    input: 0.10, 
+                    output: 0.40 
+                },
+                // Google Gemini 2.0 Series
+                'google-gemini-2.0-flash': { 
+                    name: 'Google: Gemini 2.0 Flash', 
+                    family: 'google_fixed',
+                    input: 0.10, 
+                    output: 0.40 
+                },
+                'google-gemini-2.0-flash-lite': { 
+                    name: 'Google: Gemini 2.0 Flash-Lite', 
+                    family: 'google_fixed',
+                    input: 0.075, 
+                    output: 0.30 
+                },
+                // Google Gemini 1.5 Series
+                'google-gemini-1.5-pro': { 
+                    name: 'Google: Gemini 1.5 Pro', 
+                    family: 'google',
+                    tiers: {
+                        'free': { name: 'Nível Gratuito', input: 0.00, output: 0.00 },
+                        'low_context': { name: 'Pago (<= 128 mil tokens)', input: 1.25, output: 5.00 },
+                        'high_context': { name: 'Pago (> 128 mil tokens)', input: 2.50, output: 10.00 }
+                    }
+                },
+                'google-gemini-1.5-flash': { 
+                    name: 'Google: Gemini 1.5 Flash', 
+                    family: 'google',
+                    tiers: {
+                        'free': { name: 'Nível Gratuito', input: 0.00, output: 0.00 },
+                        'low_context': { name: 'Pago (<= 128 mil tokens)', input: 0.075, output: 0.30 },
+                        'high_context': { name: 'Pago (> 128 mil tokens)', input: 0.15, output: 0.60 }
+                    }
+                },
+                'google-gemini-1.5-flash-8b': { 
+                    name: 'Google: Gemini 1.5 Flash (8B)', 
+                    family: 'google',
+                    tiers: {
+                        'free': { name: 'Nível Gratuito', input: 0.00, output: 0.00 },
+                        'low_context': { name: 'Pago (<= 128 mil tokens)', input: 0.0375, output: 0.15 },
+                        'high_context': { name: 'Pago (> 128 mil tokens)', input: 0.075, output: 0.30 }
+                    }
+                },
+                 // Google Embedding
+                'google-embedding-004': { 
+                    name: 'Embedding: Google text-embedding-004', 
+                    family: 'google',
+                    tiers: {
+                        'free': { name: 'Nível Gratuito', input: 0.00, output: 0.00 },
+                        'paid': { name: 'Pago', input: 0.40, output: 0.00 }
+                    }
+                },
+                // OpenAI Models
                 'openai-gpt4o': { name: 'OpenAI: GPT-4o', input: 5.00, output: 15.00, family: 'openai' },
                 'openai-gpt4o-mini': { name: 'OpenAI: GPT-4o mini', input: 0.15, output: 0.60, family: 'openai' },
                 'openai-gpt4-turbo': { name: 'OpenAI: GPT-4 Turbo', input: 10.00, output: 30.00, family: 'openai' },
-                'openai-gpt4-32k': { name: 'OpenAI: GPT-4 (32k)', input: 60.00, output: 120.00, family: 'openai' },
-                'openai-gpt4': { name: 'OpenAI: GPT-4 (8k)', input: 30.00, output: 60.00, family: 'openai' },
                 'openai-gpt3.5-turbo': { name: 'OpenAI: GPT-3.5 Turbo', input: 0.50, output: 1.50, family: 'openai' },
-                // Anthropic Chat - Gen 4
-                'anthropic-claude4-opus': { name: 'Anthropic: Claude 4 Opus', input: 15.00, output: 75.00, family: 'anthropic' },
-                'anthropic-claude4-sonnet': { name: 'Anthropic: Claude 4 Sonnet', input: 3.00, output: 15.00, family: 'anthropic' },
-                // Anthropic Chat - Gen 3.5
-                'anthropic-claude3.5-sonnet': { name: 'Anthropic: Claude 3.5 Sonnet', input: 3.00, output: 15.00, family: 'anthropic' },
-                // Anthropic Chat - Gen 3
-                'anthropic-claude3-opus': { name: 'Anthropic: Claude 3 Opus', input: 15.00, output: 75.00, family: 'anthropic' },
-                'anthropic-claude3-sonnet': { name: 'Anthropic: Claude 3 Sonnet', input: 3.00, output: 15.00, family: 'anthropic' },
-                'anthropic-claude3-haiku': { name: 'Anthropic: Claude 3 Haiku', input: 0.25, output: 1.25, family: 'anthropic' },
-                // Anthropic Chat - Legacy
-                'anthropic-claude2.1': { name: 'Anthropic: Claude 2.1', input: 8.00, output: 24.00, family: 'anthropic' },
-                'anthropic-claude2.0': { name: 'Anthropic: Claude 2.0', input: 8.00, output: 24.00, family: 'anthropic' },
-                'anthropic-claude-instant-1.2': { name: 'Anthropic: Claude Instant 1.2', input: 0.80, output: 2.40, family: 'anthropic' },
-                // Google Chat - Tier 1 Pricing from ai.google.dev
-                'google-gemini-1.5-pro': { name: 'Google: Gemini 1.5 Pro', input: 3.50, output: 7.00, family: 'google' },
-                'google-gemini-1.5-flash': { name: 'Google: Gemini 1.5 Flash', input: 0.35, output: 0.70, family: 'google' },
-                'google-gemini-1.0-pro': { name: 'Google: Gemini 1.0 Pro', input: 0.50, output: 1.50, family: 'google' },
-                // Google Chat (Vertex AI Pricing - Kept for reference)
-                'google-gemini-1.0-pro-vision-vertex': { name: 'Google: Gemini 1.0 Pro Vision (Vertex)', input: 0.25, output: 0.75, family: 'google' },
-                // Google Chat (Preview)
-                'google-gemini-2.5-pro-preview': { name: 'Google: Gemini 2.5 Pro (Preview)', input: 0.00, output: 0.00, family: 'google' },
-                'google-gemini-2.5-flash-preview': { name: 'Google: Gemini 2.5 Flash (Preview)', input: 0.00, output: 0.00, family: 'google' },
+                // Anthropic Models
+                'anthropic-claude4-opus': { name: 'Anthropic: Claude Opus 4', input: 15.00, output: 75.00, family: 'anthropic' },
+                'anthropic-claude4-sonnet': { name: 'Anthropic: Claude Sonnet 4', input: 3.00, output: 15.00, family: 'anthropic' },
+                'anthropic-claude3.7-sonnet': { name: 'Anthropic: Claude Sonnet 3.7', input: 3.00, output: 15.00, family: 'anthropic' },
+                'anthropic-claude3.5-sonnet': { name: 'Anthropic: Claude Sonnet 3.5', input: 3.00, output: 15.00, family: 'anthropic' },
+                'anthropic-claude3.5-haiku': { name: 'Anthropic: Claude Haiku 3.5', input: 0.80, output: 4.00, family: 'anthropic' },
+                'anthropic-claude3-opus': { name: 'Anthropic: Claude Opus 3', input: 15.00, output: 75.00, family: 'anthropic' },
+                'anthropic-claude3-haiku': { name: 'Anthropic: Claude Haiku 3', input: 0.25, output: 1.25, family: 'anthropic' },
                 // Embedding Models
                 'openai-embedding-3-large': { name: 'Embedding: OpenAI 3 Large', input: 0.13, output: 0, family: 'embedding' },
                 'openai-embedding-3-small': { name: 'Embedding: OpenAI 3 Small', input: 0.02, output: 0, family: 'embedding' },
-                'openai-embedding-ada-002': { name: 'Embedding: OpenAI Ada v2', input: 0.10, output: 0, family: 'embedding' },
-                'google-embedding-004': { name: 'Embedding: Google 004', input: 0.20, output: 0, family: 'embedding' },
-                'google-multilingual-embedding-002': { name: 'Embedding: Google Multilingual 002', input: 0.20, output: 0, family: 'embedding' }
             };
 
             // --- FUNÇÕES ---
@@ -259,27 +323,54 @@
 
             function countTokens(text, modelFamily) {
                 if (!text) return 0;
-
                 if ((modelFamily === 'openai' || modelFamily === 'embedding') && window.gptTokenizer) {
                     return window.gptTokenizer.encode(text).length;
                 }
-                
                 switch (modelFamily) {
-                    case 'anthropic':
-                        return Math.ceil(text.length / 3.5);
+                    case 'anthropic': return Math.ceil(text.length / 3.5);
                     case 'google':
+                    case 'google_fixed':
                     case 'openai': 
-                    default:
-                        return Math.ceil(text.length / 4);
+                    default: return Math.ceil(text.length / 4);
                 }
+            }
+
+            function updateTierSelector() {
+                const selectedModelKey = modelSelect.value;
+                const model = modelPricing[selectedModelKey];
+
+                if (model && model.tiers) {
+                    tierSelect.innerHTML = ''; // Limpa opções anteriores
+                    for (const tierKey in model.tiers) {
+                        const tier = model.tiers[tierKey];
+                        const option = document.createElement('option');
+                        option.value = tierKey;
+                        option.textContent = tier.name;
+                        tierSelect.appendChild(option);
+                    }
+                    tierSelectionContainer.classList.remove('hidden');
+                } else {
+                    tierSelectionContainer.classList.add('hidden');
+                }
+                runCalculations();
             }
 
             function runCalculations() {
                 const text = textInput.value;
                 const selectedModelKey = modelSelect.value;
-                const model = modelPricing[selectedModelKey];
+                const modelData = modelPricing[selectedModelKey];
                 
-                const isEmbeddingModel = model.family === 'embedding';
+                let currentPrice = { input: 0, output: 0 };
+
+                if (modelData.tiers) {
+                    const selectedTierKey = tierSelect.value;
+                    currentPrice = modelData.tiers[selectedTierKey];
+                } else {
+                    currentPrice.input = modelData.input;
+                    currentPrice.output = modelData.output;
+                }
+                
+                const isEmbeddingModel = currentPrice.output === 0;
                 outputContainer.style.display = isEmbeddingModel ? 'none' : 'block';
                 outputCostContainer.style.display = isEmbeddingModel ? 'none' : 'block';
 
@@ -288,14 +379,14 @@
                 const charCount = text.length;
                 const wordCount = text ? text.trim().split(/\s+/).filter(Boolean).length : 0;
                 const sentenceCount = text ? (text.match(/[^\.!\?]+[\.!\?]+/g) || []).length : 0;
-                const inputTokens = countTokens(text, model.family);
+                const inputTokens = countTokens(text, modelData.family);
 
                 charCountEl.textContent = charCount.toLocaleString('pt-BR');
                 wordCountEl.textContent = wordCount.toLocaleString('pt-BR');
                 sentenceCountEl.textContent = sentenceCount.toLocaleString('pt-BR');
                 tokenCountEl.textContent = inputTokens.toLocaleString('pt-BR');
 
-                if (model.family === 'openai' && window.gptTokenizer) {
+                if (modelData.family === 'openai' && window.gptTokenizer) {
                     tokenizerNoteEl.textContent = 'Contagem precisa';
                     tokenizerNoteEl.style.color = '#16a34a'; // green-600
                 } else {
@@ -303,8 +394,8 @@
                     tokenizerNoteEl.style.color = '#ca8a04'; // yellow-600
                 }
 
-                const inputCost = (inputTokens / 1000000) * model.input;
-                const outputCost = (outputTokens / 1000000) * model.output;
+                const inputCost = (inputTokens / 1000000) * currentPrice.input;
+                const outputCost = (outputTokens / 1000000) * currentPrice.output;
                 const totalInteractionCost = inputCost + outputCost;
 
                 inputCostEl.textContent = formatCurrency(inputCost);
@@ -330,15 +421,14 @@
 
             // --- INICIALIZAÇÃO DA UI ---
             const categories = {
-                "Modelos de Chat (OpenAI - Novos)": ['openai-o3', 'openai-o4-mini', 'openai-gpt4.1', 'openai-gpt4.1-mini', 'openai-gpt4.1-nano'],
-                "Modelos de Chat (OpenAI)": ['openai-gpt4o', 'openai-gpt4o-mini', 'openai-gpt4-turbo', 'openai-gpt4-32k', 'openai-gpt4', 'openai-gpt3.5-turbo'],
-                "Modelos de Chat (Anthropic - Geração 4)": ['anthropic-claude4-opus', 'anthropic-claude4-sonnet'],
-                "Modelos de Chat (Anthropic - Geração 3.5)": ['anthropic-claude3.5-sonnet'],
-                "Modelos de Chat (Anthropic - Geração 3)": ['anthropic-claude3-opus', 'anthropic-claude3-sonnet', 'anthropic-claude3-haiku'],
-                "Modelos de Chat (Anthropic - Legados)": ['anthropic-claude2.1', 'anthropic-claude2.0', 'anthropic-claude-instant-1.2'],
-                "Modelos de Chat (Google)": ['google-gemini-1.5-pro', 'google-gemini-1.5-flash', 'google-gemini-1.0-pro', 'google-gemini-1.0-pro-vision-vertex'],
-                "Modelos de Chat (Google - Preview)": ['google-gemini-2.5-pro-preview', 'google-gemini-2.5-flash-preview'],
-                "Modelos de Embedding": ['openai-embedding-3-large', 'openai-embedding-3-small', 'openai-embedding-ada-002', 'google-embedding-004', 'google-multilingual-embedding-002']
+                "Modelos de Chat (Google - Série 2.5)": ['google-gemini-2.5-pro', 'google-gemini-2.5-flash', 'google-gemini-2.5-flash-lite'],
+                "Modelos de Chat (Google - Série 2.0)": ['google-gemini-2.0-flash', 'google-gemini-2.0-flash-lite'],
+                "Modelos de Chat (Google - Série 1.5)": ['google-gemini-1.5-pro', 'google-gemini-1.5-flash', 'google-gemini-1.5-flash-8b'],
+                "Modelos de Embedding (Google)": ['google-embedding-004'],
+                "Modelos de Chat (OpenAI)": ['openai-gpt4o', 'openai-gpt4o-mini', 'openai-gpt4-turbo', 'openai-gpt3.5-turbo'],
+                "Modelos de Chat (Anthropic - Série 4)": ['anthropic-claude4-opus', 'anthropic-claude4-sonnet'],
+                "Modelos de Chat (Anthropic - Série 3.x)": ['anthropic-claude3.7-sonnet', 'anthropic-claude3.5-sonnet', 'anthropic-claude3.5-haiku', 'anthropic-claude3-opus', 'anthropic-claude3-haiku'],
+                "Modelos de Embedding (OpenAI)": ['openai-embedding-3-large', 'openai-embedding-3-small']
             };
 
             for (const category in categories) {
@@ -352,11 +442,12 @@
                 });
                 modelSelect.appendChild(optgroup);
             }
-            modelSelect.value = 'openai-o3';
+            modelSelect.value = 'google-gemini-2.5-pro';
 
             // --- OUVINTES DE EVENTOS ---
             textInput.addEventListener('input', runCalculations);
-            modelSelect.addEventListener('change', runCalculations);
+            modelSelect.addEventListener('change', updateTierSelector);
+            tierSelect.addEventListener('change', runCalculations);
             outputSlider.addEventListener('input', () => {
                 outputSliderValue.textContent = outputSlider.value;
                 runCalculations();
@@ -366,8 +457,7 @@
             interactionsConversationInput.addEventListener('input', runCalculations);
 
             // --- CÁLCULO INICIAL ---
-            runCalculations();
-            setTimeout(runCalculations, 500);
+            updateTierSelector();
         });
     </script>
 </body>
